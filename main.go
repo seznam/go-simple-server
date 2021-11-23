@@ -20,6 +20,13 @@ var (
 		Help:    "Time (in seconds) spent serving HTTP requests.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"app", "method", "endpoint", "status_code"})
+
+	sloClasses = []string{
+		"high",
+		"low",
+	}
+	defaultSloDomain = "go-simple-server-domain"
+	sloApp           = "go-simple-server"
 )
 
 type responseObserver struct {
@@ -50,7 +57,7 @@ func middleware(handler http.Handler) http.Handler {
 		duration := time.Since(start)
 
 		requestDuration.WithLabelValues("go-simple-server", r.Method, r.RequestURI, strconv.Itoa(o.statusCode)).Observe(float64(duration.Seconds()))
-		log.Infof("%s %v %d %s", r.Method, r.RequestURI, o.statusCode, duration)
+		log.Infof("%s %v %d %s slo-class=%s slo-result=%s", r.Method, r.RequestURI, o.statusCode, duration, w.Header().Get("slo-class"), w.Header().Get("slo-result"))
 	})
 }
 
@@ -60,11 +67,37 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	result := rand.Intn(3)
-	if result != 0 {
+	// add slo domain and slo app header
+	sloDomain := os.Getenv("SLO_DOMAIN")
+	if sloDomain == "" {
+		sloDomain = defaultSloDomain
+	}
+	w.Header().Add("slo-app", sloApp)
+	w.Header().Add("slo-domain", sloDomain)
+
+	// sleep for random duration
+	wait := rand.Int63n(1000)
+	time.Sleep(time.Duration(wait) * time.Millisecond)
+
+	// pick random class
+	class := sloClasses[rand.Intn(len(sloClasses))]
+	w.Header().Add("slo-class", class)
+
+	// return random status code:
+	// - 200 - 50%
+	// - 404 - 20%
+	// - 500 - 30%
+	result := rand.Intn(10)
+	if result < 5 {
+		w.Header().Add("slo-result", "ok")
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, "OK")
+	} else if result < 7 {
+		w.Header().Add("slo-result", "ok")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, "Not found")
 	} else {
+		w.Header().Add("slo-result", "fail")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = io.WriteString(w, "Internal server error")
 	}
@@ -84,8 +117,9 @@ func main() {
 
 func init() {
 	log.SetLevel(log.InfoLevel)
-	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
+	log.SetFormatter(&log.TextFormatter{FullTimestamp: true, PadLevelText: true})
 	log.SetOutput(os.Stdout)
 
 	prometheus.MustRegister(requestDuration)
+	rand.Seed(time.Now().Unix())
 }

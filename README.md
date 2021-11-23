@@ -38,7 +38,7 @@ INFO[2021-04-29T12:01:25+02:00] Server started
 ```
 
 ## Endpoints
-* `/` - returns `200 OK` or `500 internal server error`. There is 2:1 chance to get `200`.
+* `/` - returns `200 OK`, `404 Not Found`, `500 internal server error`. There is 5:2:3 chances to get 200, 404, 500 status code. Also there is random latency (0-1000 ms)
 * `/liveness` - used for kubernetes liveness check - returns `200 OK`
 * `/readiness` - used for kubernetes readinsss check - returns `200 OK`
 * `/metrics` - used for prometheus metrics scraping
